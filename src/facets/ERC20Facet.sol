@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../libraries/LibDiamond.sol";
 
-contract ERC20Facet is ERC20 {
+contract ERC20Facet is IERC20 {
     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.erc20.storage");
 
     struct ERC20Storage {
         mapping(address => uint256) balances;
         mapping(address => mapping(address => uint256)) allowances;
         uint256 totalSupply;
+        string name;
+        string symbol;
     }
 
     function erc20Storage() internal pure returns (ERC20Storage storage ds) {
@@ -20,17 +22,22 @@ contract ERC20Facet is ERC20 {
         }
     }
 
-    constructor() ERC20("DiamondToken", "DTK") {}
-
-    function name() public pure override returns (string memory) {
-        return "DiamondToken";
+    function initialize(string memory _name, string memory _symbol) external {
+        LibDiamond.enforceIsContractOwner();
+        ERC20Storage storage es = erc20Storage();
+        es.name = _name;
+        es.symbol = _symbol;
     }
 
-    function symbol() public pure override returns (string memory) {
-        return "DTK";
+    function name() public view returns (string memory) {
+        return erc20Storage().name;
     }
 
-    function decimals() public pure override returns (uint8) {
+    function symbol() public view returns (string memory) {
+        return erc20Storage().symbol;
+    }
+
+    function decimals() public pure returns (uint8) {
         return 18;
     }
 
@@ -58,7 +65,8 @@ contract ERC20Facet is ERC20 {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        uint256 currentAllowance = erc20Storage().allowances[sender][msg.sender];
+        ERC20Storage storage es = erc20Storage();
+        uint256 currentAllowance = es.allowances[sender][msg.sender];
         require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
         unchecked {
             _approve(sender, msg.sender, currentAllowance - amount);
@@ -110,5 +118,16 @@ contract ERC20Facet is ERC20 {
         es.totalSupply -= amount;
 
         emit Transfer(account, address(0), amount);
+    }
+
+    // Additional functions for minting and burning (to be called by the contract owner)
+    function mint(address account, uint256 amount) external {
+        LibDiamond.enforceIsContractOwner();
+        _mint(account, amount);
+    }
+
+    function burn(address account, uint256 amount) external {
+        LibDiamond.enforceIsContractOwner();
+        _burn(account, amount);
     }
 }
